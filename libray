@@ -1,0 +1,496 @@
+--// Services
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+--// Configuration
+local Sync = {
+    Name = "Sync Library",
+    Theme = {
+        MainColor = Color3.fromRGB(20, 20, 25),       -- Dark Background
+        SecondaryColor = Color3.fromRGB(30, 30, 35),  -- Sidebar/Element BG
+        AccentColor = Color3.fromRGB(0, 140, 255),    -- Blue Tint
+        TextColor = Color3.fromRGB(255, 255, 255),
+        SubTextColor = Color3.fromRGB(150, 150, 150),
+        StrokeColor = Color3.fromRGB(60, 60, 70)
+    },
+    Windows = {}
+}
+
+--// Utility Functions
+local function MakeDraggable(ui)
+    local dragging = false
+    local dragInput, mousePos, framePos
+
+    ui.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            mousePos = input.Position
+            framePos = ui.Parent.Position
+            
+            ui:CaptureFocus()
+        end
+    end)
+
+    ui.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    ui.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - mousePos
+            ui.Parent.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+local function Create(class, props)
+    local obj = Instance.new(class)
+    for i, v in pairs(props) do
+        obj[i] = v
+    end
+    return obj
+end
+
+local function Tween(obj, info, goal)
+    TweenService:Create(obj, info, goal):Play()
+end
+
+--// Notification System
+local ScreenGui = Create("ScreenGui", {
+    Name = "SyncGui",
+    IgnoreGuiInset = true,
+    Parent = game:GetService("CoreGui"),
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+})
+
+local NotificationHolder = Create("Frame", {
+    Name = "NotificationHolder",
+    Size = UDim2.new(0, 350, 1, 0),
+    Position = UDim2.new(1, -360, 1, -20),
+    BackgroundTransparency = 1,
+    Parent = ScreenGui
+})
+
+local NotificationList = Create("UIListLayout", {
+    Padding = UDim.new(0, 10),
+    HorizontalAlignment = Enum.HorizontalAlignment.Right,
+    VerticalAlignment = Enum.VerticalAlignment.Bottom,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Parent = NotificationHolder
+})
+
+function Sync.Notify(title, text, duration)
+    duration = duration or 5
+    
+    local NotifFrame = Create("Frame", {
+        Name = "Notification",
+        Size = UDim2.new(1, 0, 0, 60),
+        BackgroundColor3 = Sync.Theme.SecondaryColor,
+        BorderSizePixel = 0,
+        Parent = NotificationHolder,
+        LayoutOrder = tick()
+    })
+    
+    local NotifCorner = Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = NotifFrame})
+    local NotifStroke = Create("UIStroke", {Color = Sync.Theme.StrokeColor, Thickness = 1, Parent = NotifFrame})
+    
+    local TitleLabel = Create("TextLabel", {
+        Size = UDim2.new(1, -20, 0, 25),
+        Position = UDim2.new(0, 10, 0, 5),
+        BackgroundTransparency = 1,
+        Text = title,
+        TextColor3 = Sync.Theme.TextColor,
+        TextSize = 18,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = NotifFrame
+    })
+    
+    local DescLabel = Create("TextLabel", {
+        Size = UDim2.new(1, -20, 0, 20),
+        Position = UDim2.new(0, 10, 0, 30),
+        BackgroundTransparency = 1,
+        Text = text,
+        TextColor3 = Sync.Theme.SubTextColor,
+        TextSize = 14,
+        Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = NotifFrame
+    })
+    
+    NotifFrame.Size = UDim2.new(0, 0, 0, 60) -- Start hidden
+    NotifFrame:TweenSize(UDim2.new(1, 0, 0, 60), "Out", "Quart", 0.4, true)
+    
+    task.delay(duration, function()
+        NotifFrame:TweenSize(UDim2.new(0, 0, 0, 60), "In", "Quart", 0.4, true)
+        task.wait(0.4)
+        NotifFrame:Destroy()
+    end)
+end
+
+--// Window Class
+function Sync:MakeWindow(opts)
+    local Title = opts.Title or "Sync Window"
+    local SubTitle = opts.SubTitle or "Example UI"
+
+    -- Main Container
+    local MainFrame = Create("Frame", {
+        Name = "SyncWindow",
+        Size = UDim2.new(0, 600, 0, 450),
+        Position = UDim2.new(0.5, -300, 0.5, -225),
+        BackgroundColor3 = Sync.Theme.MainColor,
+        BorderSizePixel = 0,
+        Parent = ScreenGui,
+        ClipsDescendants = true
+    })
+
+    local MainCorner = Create("UICorner", {CornerRadius = UDim.new(0, 12), Parent = MainFrame})
+    local MainStroke = Create("UIStroke", {Color = Sync.Theme.StrokeColor, Thickness = 1.5, Parent = MainFrame})
+    
+    -- Opening Animation
+    MainFrame.Size = UDim2.new(0, 0, 0, 0)
+    Tween(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 600, 0, 450)})
+    
+    -- Header / Drag Area
+    local Header = Create("Frame", {
+        Name = "Header",
+        Size = UDim2.new(1, 0, 0, 50),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BackgroundTransparency = 0.98,
+        BorderSizePixel = 0,
+        Parent = MainFrame
+    })
+    
+    local HeaderPadding = Create("UIPadding", {PaddingTop = UDim.new(0, 5), Parent = Header})
+    
+    local TitleLabel = Create("TextLabel", {
+        Size = UDim2.new(1, -120, 0, 25),
+        Position = UDim2.new(0, 20, 0, 5),
+        BackgroundTransparency = 1,
+        Text = Title,
+        TextColor3 = Sync.Theme.AccentColor,
+        TextSize = 22,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Header
+    })
+    
+    local SubTitleLabel = Create("TextLabel", {
+        Size = UDim2.new(1, -120, 0, 15),
+        Position = UDim2.new(0, 20, 0, 30),
+        BackgroundTransparency = 1,
+        Text = SubTitle,
+        TextColor3 = Sync.Theme.SubTextColor,
+        TextSize = 13,
+        Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = Header
+    })
+
+    local Divider = Create("Frame", {
+        Size = UDim2.new(1, -40, 0, 1),
+        Position = UDim2.new(0, 20, 0, 50),
+        BackgroundColor3 = Sync.Theme.StrokeColor,
+        BorderSizePixel = 0,
+        Parent = MainFrame
+    })
+    
+    MakeDraggable(Header)
+
+    -- Layout for Tabs vs Content
+    local Sidebar = Create("Frame", {
+        Name = "Sidebar",
+        Size = UDim2.new(0, 160, 1, -60),
+        Position = UDim2.new(0, 0, 0, 60),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Parent = MainFrame
+    })
+
+    local SidebarList = Create("UIListLayout", {
+        Padding = UDim.new(0, 5),
+        FillDirection = Enum.FillDirection.Vertical,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        Parent = Sidebar
+    })
+
+    local ContentFrame = Create("ScrollingFrame", {
+        Name = "Content",
+        Size = UDim2.new(1, -180, 1, -70),
+        Position = UDim2.new(0, 170, 0, 60),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 4,
+        ScrollBarImageColor3 = Sync.Theme.StrokeColor,
+        Parent = MainFrame
+    })
+
+    local ContentPadding = Create("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), Parent = ContentFrame})
+    local ContentList = Create("UIListLayout", {Padding = UDim.new(0, 8), Parent = ContentFrame})
+    
+    ContentFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+
+    local WindowTabs = {}
+
+    local function AddTab(TabName, Icon)
+        -- Sidebar Button
+        local TabBtn = Create("TextButton", {
+            Name = TabName,
+            Size = UDim2.new(1, -20, 0, 35),
+            BackgroundColor3 = Sync.Theme.MainColor,
+            BorderSizePixel = 0,
+            Text = "  "..TabName,
+            TextColor3 = Sync.Theme.SubTextColor,
+            TextSize = 16,
+            Font = Enum.Font.Gotham,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = Sidebar
+        })
+        
+        local TabCorner = Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = TabBtn})
+        
+        -- Content Container for this tab
+        local TabContainer = Create("Frame", {
+            Name = TabName.."_Container",
+            Size = UDim2.new(1, 0, 0, 0), -- Auto size based on children
+            BackgroundTransparency = 1,
+            Visible = false,
+            Parent = ContentFrame
+        })
+        local TabLayout = Create("UIListLayout", {Padding = UDim.new(0, 10), Parent = TabContainer})
+
+        -- Logic to switch tabs
+        TabBtn.MouseButton1Click:Connect(function()
+            -- Reset all buttons
+            for _, btn in pairs(Sidebar:GetChildren()) do
+                if btn:IsA("TextButton") then
+                    Tween(btn, TweenInfo.new(0.3), {BackgroundColor3 = Sync.Theme.MainColor, TextColor3 = Sync.Theme.SubTextColor})
+                end
+            end
+            -- Hide all containers
+            for _, container in pairs(ContentFrame:GetChildren()) do
+                if container:IsA("Frame") then
+                    container.Visible = false
+                end
+            end
+            
+            -- Set active
+            Tween(TabBtn, TweenInfo.new(0.3), {BackgroundColor3 = Sync.Theme.AccentColor, TextColor3 = Color3.fromRGB(255,255,255)})
+            TabContainer.Visible = true
+            
+            -- Update Canvas
+            ContentFrame.CanvasSize = UDim2.new(0, 0, 0, TabLayout.AbsoluteContentSize.Y + 20)
+        end)
+
+        table.insert(WindowTabs, TabContainer)
+        return TabContainer
+    end
+
+    local FirstTab = AddTab("Main", "rbxassetid://") -- Defaults to first
+    FirstTab.Visible = true -- Show first tab by default
+    
+    -- Manually highlight first tab button
+    task.wait(0.1)
+    local firstBtn = Sidebar:FindFirstChild("Main")
+    if firstBtn then
+        Tween(firstBtn, TweenInfo.new(0), {BackgroundColor3 = Sync.Theme.AccentColor, TextColor3 = Color3.fromRGB(255,255,255)})
+    end
+
+    -- Elements
+    
+    local function AddButton(Parent, Text, Callback)
+        local Btn = Create("TextButton", {
+            Size = UDim2.new(1, 0, 0, 40),
+            BackgroundColor3 = Sync.Theme.SecondaryColor,
+            BorderSizePixel = 0,
+            Text = Text,
+            TextColor3 = Sync.Theme.TextColor,
+            Font = Enum.Font.GothamBold,
+            TextSize = 16,
+            Parent = Parent
+        })
+        local BtnCorner = Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = Btn})
+        local BtnStroke = Create("UIStroke", {Color = Sync.Theme.StrokeColor, Parent = Btn})
+
+        Btn.MouseButton1Click:Connect(function()
+            Tween(Btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 50, 60)})
+            task.wait(0.2)
+            Tween(Btn, TweenInfo.new(0.2), {BackgroundColor3 = Sync.Theme.SecondaryColor})
+            if Callback then Callback() end
+        end)
+    end
+
+    local function AddToggle(Parent, Text, Default, Callback)
+        local ToggleFrame = Create("Frame", {
+            Size = UDim2.new(1, 0, 0, 40),
+            BackgroundColor3 = Sync.Theme.SecondaryColor,
+            BorderSizePixel = 0,
+            Parent = Parent
+        })
+        local TgCorner = Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = ToggleFrame})
+        local TgStroke = Create("UIStroke", {Color = Sync.Theme.StrokeColor, Parent = ToggleFrame})
+
+        local TgLabel = Create("TextLabel", {
+            Size = UDim2.new(1, -50, 1, 0),
+            Position = UDim2.new(0, 15, 0, 0),
+            BackgroundTransparency = 1,
+            Text = Text,
+            TextColor3 = Sync.Theme.TextColor,
+            Font = Enum.Font.Gotham,
+            TextSize = 16,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = ToggleFrame
+        })
+
+        local TgBtn = Create("TextButton", {
+            Size = UDim2.new(0, 30, 0, 30),
+            Position = UDim2.new(1, -40, 0.5, -15),
+            BackgroundColor3 = Color3.fromRGB(50, 50, 50),
+            BorderSizePixel = 0,
+            Text = "",
+            Parent = ToggleFrame
+        })
+        local TgBtnCorner = Create("UICorner", {CornerRadius = UDim.new(0, 8), Parent = TgBtn})
+
+        local ToggleState = Default or false
+
+        local function Update()
+            if ToggleState then
+                Tween(TgBtn, TweenInfo.new(0.2), {BackgroundColor3 = Sync.Theme.AccentColor})
+            else
+                Tween(TgBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 50, 50)})
+            end
+            if Callback then Callback(ToggleState) end
+        end
+
+        TgBtn.MouseButton1Click:Connect(function()
+            ToggleState = not ToggleState
+            Update()
+        end)
+        
+        Update()
+    end
+
+    local function AddSlider(Parent, Text, Min, Max, Default, Callback)
+        local SliderFrame = Create("Frame", {
+            Size = UDim2.new(1, 0, 0, 50),
+            BackgroundColor3 = Sync.Theme.SecondaryColor,
+            BorderSizePixel = 0,
+            Parent = Parent
+        })
+        local SlCorner = Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = SliderFrame})
+        local SlStroke = Create("UIStroke", {Color = Sync.Theme.StrokeColor, Parent = SliderFrame})
+
+        local SlLabel = Create("TextLabel", {
+            Size = UDim2.new(1, -20, 0, 20),
+            Position = UDim2.new(0, 10, 0, 5),
+            BackgroundTransparency = 1,
+            Text = Text .. " : " .. tostring(Default),
+            TextColor3 = Sync.Theme.TextColor,
+            Font = Enum.Font.Gotham,
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = SliderFrame
+        })
+
+        local SliderBar = Create("Frame", {
+            Size = UDim2.new(1, -20, 0, 6),
+            Position = UDim2.new(0, 10, 0, 30),
+            BackgroundColor3 = Color3.fromRGB(40, 40, 40),
+            BorderSizePixel = 0,
+            Parent = SliderFrame
+        })
+        local SlBarCorner = Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = SliderBar})
+        
+        local SliderFill = Create("Frame", {
+            Size = UDim2.new((Default - Min) / (Max - Min), 0, 1, 0),
+            BackgroundColor3 = Sync.Theme.AccentColor,
+            BorderSizePixel = 0,
+            Parent = SliderBar
+        })
+        local SlFillCorner = Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = SliderFill})
+        
+        local SliderBtn = Create("TextButton", {
+            Size = UDim2.new(0, 14, 0, 14),
+            Position = UDim2.new((Default - Min) / (Max - Min), -7, 0.5, -7),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            Text = "",
+            Parent = SliderBar
+        })
+        local SlBtnCorner = Create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = SliderBtn})
+        local SlBtnStroke = Create("UIStroke", {Color = Sync.Theme.AccentColor, Thickness = 2, Parent = SliderBtn})
+
+        local Sliding = false
+
+        SliderBtn.MouseButton1Down:Connect(function() Sliding = true end)
+        SliderBar.MouseButton1Down:Connect(function() Sliding = true end)
+        
+        UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then Sliding = false end end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if Sliding and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local MousePos = UserInputService:GetMouseLocation()
+                local BarPos = SliderBar:AbsolutePosition()
+                local BarSize = SliderBar:AbsoluteSize()
+                
+                local Percent = math.clamp((MousePos.X - BarPos.X) / BarSize, 0, 1)
+                local Value = math.floor(Min + (Max - Min) * Percent)
+                
+                SliderFill.Size = UDim2.new(Percent, 0, 1, 0)
+                SliderBtn.Position = UDim2.new(Percent, -7, 0.5, -7)
+                SlLabel.Text = Text .. " : " .. tostring(Value)
+                
+                if Callback then Callback(Value) end
+            end
+        end)
+    end
+    
+    local function AddInput(Parent, Placeholder, Text, Callback)
+        local InputFrame = Create("Frame", {
+            Size = UDim2.new(1, 0, 0, 40),
+            BackgroundColor3 = Sync.Theme.SecondaryColor,
+            BorderSizePixel = 0,
+            Parent = Parent
+        })
+        local InCorner = Create("UICorner", {CornerRadius = UDim.new(0, 6), Parent = InputFrame})
+        local InStroke = Create("UIStroke", {Color = Sync.Theme.StrokeColor, Parent = InputFrame})
+
+        local InBox = Create("TextBox", {
+            Size = UDim2.new(1, -20, 1, -10),
+            Position = UDim2.new(0, 10, 0, 5),
+            BackgroundTransparency = 1,
+            PlaceholderText = Placeholder,
+            Text = Text or "",
+            TextColor3 = Sync.Theme.TextColor,
+            PlaceholderColor3 = Color3.fromRGB(100, 100, 100),
+            Font = Enum.Font.Gotham,
+            TextSize = 14,
+            ClearTextOnFocus = false,
+            Parent = InputFrame
+        })
+        
+        InBox.FocusLost:Connect(function(enterPressed)
+            if Callback then Callback(InBox.Text, enterPressed) end
+        end)
+    end
+
+    return {
+        AddTab = AddTab,
+        AddButton = AddButton,
+        AddToggle = AddToggle,
+        AddSlider = AddSlider,
+        AddInput = AddInput
+    }
+end
+
+return Sync
